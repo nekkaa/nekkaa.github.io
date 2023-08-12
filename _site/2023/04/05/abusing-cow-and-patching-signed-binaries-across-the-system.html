@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Abusing COW to create system wide and process specific patches | nekka’s blog</title>
+<meta name="generator" content="Jekyll v4.3.2" />
+<meta property="og:title" content="Abusing COW to create system wide and process specific patches" />
+<meta property="og:locale" content="en_US" />
+<link rel="canonical" href="http://localhost:4000/2023/04/05/abusing-cow-and-patching-signed-binaries-across-the-system.html" />
+<meta property="og:url" content="http://localhost:4000/2023/04/05/abusing-cow-and-patching-signed-binaries-across-the-system.html" />
+<meta property="og:site_name" content="nekka’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2023-04-05T00:00:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Abusing COW to create system wide and process specific patches" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2023-04-05T00:00:00+02:00","datePublished":"2023-04-05T00:00:00+02:00","headline":"Abusing COW to create system wide and process specific patches","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2023/04/05/abusing-cow-and-patching-signed-binaries-across-the-system.html"},"url":"http://localhost:4000/2023/04/05/abusing-cow-and-patching-signed-binaries-across-the-system.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="nekka&apos;s blog" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">nekka&#39;s blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">about</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Abusing COW to create system wide and process specific patches</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2023-04-05T00:00:00+02:00" itemprop="datePublished">Apr 5, 2023
+      </time></p>
+      
+      <link rel="icon" type="image/png" href="/assets/resized.ico">
+      
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p><img src="/assets/crazy-cow.png" alt="crazy-cow" /></p>
+
+<h1 id="introduction">Introduction</h1>
+
+<p>Imagine if a program needed to load a library that has already been loaded by other programs in the system.
+The operating system would have to load once again that same library just for that program, which would result in having multiple copies of it in memory.</p>
+
+<p>Apply this concept to a library that’s loaded by all programs in the system, for example ntdll on Windows systems, you can understand that having all of 
+these copies of the library is a huge waste of memory.</p>
+
+<p><img src="/assets/wo-cow.png" alt="with-cow" /></p>
+
+<p>This is what copy on write solves, it allows multiple programs to share the same memory until one of them modifies it.</p>
+
+<p><img src="/assets/w-cow.png" alt="with-cow" /></p>
+
+<p>To achieve this, the memory pages are marked with the copy on write protection in the page tables so that the processor generates a page fault if it tries to modify them.</p>
+
+<p>The page fault would then be handled by the operating system which allocates a new copy of the page and maps it into the program that’s trying to modify it.
+This ensures that the changes made by the program don’t relfect in the other programs as well.</p>
+
+<h1 id="getting-around-copy-on-write">Getting around Copy On Write</h1>
+
+<p>Getting around this means that we need to be able to modify the memory without the processor generating a page fault, so that the remapping process is never started to begin with.</p>
+
+<p>The processor generates a page fault because during the virtual to physical memory translation it finds out that the memory is marked with the copy on write protection. Getting past this check is pretty trivial as we can just map the physical memory page in our address space without the copy on write protection which would allow us to have our changes reflected in all of the programs.</p>
+
+<h1 id="getting-physical-memory-access">Getting physical memory access</h1>
+
+<p>A common way of getting physical memory access is through the use of a third party signed driver that exposes some functionality that we can use for the managing of physical memory from our address space.</p>
+
+<p>A driver that we can use is Intel’s driver iqvw64e.sys, it exposes functions for the mapping and unmapping of physical memory, which are pretty much just wrappers around MmMapIoSpace and MmUnmapIoSpace. It also exposes a function for the translation of virtual addresses to physical addresses, which is also just a wrapper around MmGetPhysicalAddress.</p>
+
+<p>The driver uses ioctl as the communication method and divides its ioctl request handlers in four categories each one identified by its ioctl control code. The request is then dispatched by the category request dispatcher and fed to the request handler identified by the operation_id field in the input buffer.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// ioctl control code that identifies the memory category</span>
+<span class="k">static</span> <span class="k">constexpr</span> <span class="k">auto</span> <span class="n">memory_category</span> <span class="o">=</span> <span class="mh">0x80862007</span><span class="p">;</span>
+
+<span class="c1">// identifies a request handler in the category</span>
+<span class="k">enum</span> <span class="n">operation</span> <span class="o">:</span> <span class="kt">int64_t</span> <span class="p">{</span>
+  <span class="n">virtual_to_physical</span> <span class="o">=</span> <span class="mh">0x25</span><span class="p">,</span>
+  <span class="n">map_physical</span> <span class="o">=</span> <span class="mh">0x39</span><span class="p">,</span>
+  <span class="n">unmap_physical</span> <span class="o">=</span> <span class="mh">0x3A</span>
+<span class="p">};</span>
+
+<span class="c1">// the request sent to the driver</span>
+<span class="k">struct</span> <span class="nc">request</span> <span class="p">{</span>
+  <span class="n">operation</span> <span class="n">operation_id</span><span class="p">;</span>   <span class="c1">// 0x0</span>
+  <span class="kt">int64_t</span> <span class="n">reserved</span><span class="p">;</span>         <span class="c1">// 0x8</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">result</span><span class="p">;</span>             <span class="c1">// 0x10</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">virtual_address</span><span class="p">;</span>    <span class="c1">// 0x18</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">physical_address</span><span class="p">;</span>   <span class="c1">// 0x20</span>
+  <span class="kt">size_t</span> <span class="n">number_of_bytes</span><span class="p">;</span>   <span class="c1">// 0x28</span>
+  <span class="kt">bool</span> <span class="n">is_user_mapping</span><span class="p">;</span>     <span class="c1">// 0x30</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>Now all we need to do is just build a request with the desired operation and send it to the driver with the control code identifying the memory category, the driver will take care of everything else.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">request_builder</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="c1">// builds a request for the translation of virtual addresses in physical ones</span>
+  <span class="n">request</span> <span class="n">virtual_to_physical</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">address</span><span class="p">);</span>
+
+  <span class="c1">// builds a request for the mapping of physical memory</span>
+  <span class="n">request</span> <span class="n">map_physical</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">address</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">);</span>
+
+  <span class="c1">// builds a request for the unmapping of physical memory</span>
+  <span class="n">request</span> <span class="n">unmap_physical</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">address</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="k">class</span> <span class="nc">iqvw64e</span> <span class="p">{</span>
+ <span class="nl">public:</span>
+  <span class="c1">// opens a handle to the device driver using CreateFile</span>
+  <span class="k">explicit</span> <span class="n">iqvw64e</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">device_name</span><span class="p">);</span>
+
+  <span class="c1">// closes the handle to the device driver using CloseHandle</span>
+  <span class="o">~</span><span class="n">iqvw64e</span><span class="p">();</span>
+
+  <span class="c1">// builds and sends a virtual to physical request</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">get_physical</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">address</span><span class="p">);</span>
+
+  <span class="c1">// builds and sends a physical memory mapping request</span>
+  <span class="kt">void</span><span class="o">*</span> <span class="n">map_physical</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">address</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">);</span>
+
+  <span class="c1">// builds and sends a physical memory unmapping request</span>
+  <span class="kt">bool</span> <span class="n">unmap_physical</span><span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="n">address</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">);</span>
+  
+  <span class="c1">// sends the request (DeviceIoControl wrapper)</span>
+  <span class="kt">bool</span> <span class="n">send_request</span><span class="p">(</span><span class="n">request</span><span class="o">&amp;</span> <span class="n">request</span><span class="p">);</span>
+
+  <span class="c1">// checks if the handle is valid</span>
+  <span class="kt">bool</span> <span class="n">is_initialized</span><span class="p">();</span>
+
+ <span class="nl">private:</span>
+  <span class="n">request_builder</span> <span class="n">builder_</span><span class="p">;</span>
+  <span class="n">HANDLE</span> <span class="n">device_handle_</span><span class="p">;</span>
+  <span class="kt">bool</span> <span class="n">is_initialized_</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<h1 id="copy-on-write-protected-binaries">Copy On Write protected binaries</h1>
+
+<p>In Windows for a program to load a library utilizing the copy on write technique, it needs to be able to allocate it at the same address that the other programs have it loaded at, in any other case a new copy is allocated. 
+With ASLR-enabled binaries this is almost always possible as each one will have it’s own randomized unique address, making it less likely to be reallocated.</p>
+
+<p>This concept applies for both executables and libraries, allowing us to create process specific and system wide patches, by either patching executables or libraries. The process is the same in both cases, we load an arbitrary target binary and patch its physical memory, the patches will reflect and persist until the system is restarted.</p>
+
+<h1 id="address-space-limitations">Address space limitations</h1>
+
+<p>Someone might be tempted to load a kernel driver and patch it thinking that the patches would reflect in kernel space however, as we previously discussed, this is not possible.</p>
+
+<p>The user space program would never be able to allocate memory at the address that the driver is loaded at as it’s outside of its address space, while if we were to load it first in our program and then in the kernel, it would just get reallocated because it’s outside of the kernels address space.</p>
+
+<h1 id="patching-a-third-party-library-system-wide">Patching a third party library system wide</h1>
+
+<p>We can also choose to patch a third party library to target a specific family of programs, to understand how the whole thing works I’ve written a test library that exports a “get_number” function, the function just returns an integer of 5555 which we will patch so it returns 1337.</p>
+
+<p>The patches we apply, as previously mentioned, will reflect in all the programs that have the library currently loaded as well as in the ones that will load it in the future.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// loading the library</span>
+<span class="k">auto</span> <span class="n">library</span> <span class="o">=</span> <span class="n">LoadLibraryA</span><span class="p">(</span><span class="s">"nekka.dll"</span><span class="p">);</span>
+
+<span class="c1">// getting the virtual address of the get_number function</span>
+<span class="k">auto</span> <span class="n">get_number</span> <span class="o">=</span> <span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">(</span><span class="o">*</span><span class="p">)()</span><span class="o">&gt;</span><span class="p">(</span>
+  <span class="n">GetProcAddress</span><span class="p">(</span><span class="n">library</span><span class="p">,</span> <span class="s">"get_number"</span><span class="p">));</span>
+
+<span class="c1">// performing the virtual to physical translation</span>
+<span class="k">auto</span> <span class="n">physical_addr</span> <span class="o">=</span> <span class="n">intel_driver</span><span class="p">.</span><span class="n">get_physical</span><span class="p">(</span><span class="n">get_number</span><span class="p">);</span>
+
+<span class="c1">// mapping a page of the physical memory in our address space</span>
+<span class="k">auto</span> <span class="n">mapping</span> <span class="o">=</span> <span class="n">intel_driver</span><span class="p">.</span><span class="n">map_physical</span><span class="p">(</span><span class="n">physical_addr</span><span class="p">,</span> <span class="mh">0x1000</span><span class="p">);</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">array</span><span class="o">&lt;</span><span class="kt">uint8_t</span><span class="p">,</span> <span class="mi">6</span><span class="o">&gt;</span> <span class="n">shellcode</span> <span class="p">{</span>
+  <span class="mh">0xB8</span><span class="p">,</span> <span class="mh">0x39</span><span class="p">,</span> <span class="mh">0x05</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>  <span class="c1">// mov eax, 1337</span>
+  <span class="mh">0xC3</span>                           <span class="c1">// ret</span>
+<span class="p">};</span>
+
+<span class="c1">// writing our shellcode</span>
+<span class="n">memcpy</span><span class="p">(</span><span class="n">mapping</span><span class="p">,</span> <span class="n">shellcode</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span> <span class="n">shellcode</span><span class="p">.</span><span class="n">size</span><span class="p">());</span>
+
+<span class="c1">// unmapping the page we previously mapped</span>
+<span class="n">intel_driver</span><span class="p">.</span><span class="n">unmap_physical</span><span class="p">(</span><span class="n">mapping</span><span class="p">,</span> <span class="mh">0x1000</span><span class="p">);</span>
+
+<span class="c1">// freeing the library</span>
+<span class="n">FreeLibrary</span><span class="p">(</span><span class="n">library</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p><img src="/assets/poc.png" alt="poc" /></p>
+
+<p>As we can see it works, we load the library, map a page of it’s physical memory in our address space, write the shellcode and free it, then when a program tries to load it the patches are still in place.</p>
+
+<h1 id="credits">Credits</h1>
+<ul>
+  <li>mrexodia: thanks for the advices and helping me structure this :D</li>
+</ul>
+
+  </div><a class="u-url" href="/2023/04/05/abusing-cow-and-patching-signed-binaries-across-the-system.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">nekka&#39;s blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">nekka&#39;s blog</li><li><a class="u-email" href="mailto:nekkasmail@gmail.com">nekkasmail@gmail.com</a></li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/nekkaa"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">nekkaa</span></a></li><li><a href="https://www.twitter.com/nekka_re"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">nekka_re</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p></p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
