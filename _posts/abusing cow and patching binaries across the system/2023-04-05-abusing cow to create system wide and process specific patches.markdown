@@ -108,7 +108,7 @@ class iqvw64e {
 
 # Copy On Write protected binaries
 
-In Windows for a program to load a library utilizing the copy on write technique, it needs to be able to allocate it at the same address that the other programs have it loaded at, in any other case a new copy is allocated. 
+In Windows if a program wants to load a library utilizing the copy on write technique, it needs to be able to allocate it at the same address that the other programs have it allocated at, in any other case a new copy is needed. 
 With ASLR-enabled binaries this is almost always possible as each one will have it's own randomized unique address, making it less likely to be reallocated.
 
 This concept applies for both executables and libraries, allowing us to create process specific and system wide patches, by either patching executables or libraries. The process is the same in both cases, we load an arbitrary target binary and patch its physical memory, the patches will reflect and persist until the system is restarted.
