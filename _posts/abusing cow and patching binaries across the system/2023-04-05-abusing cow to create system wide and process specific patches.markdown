@@ -113,7 +113,7 @@ With ASLR-enabled binaries this is almost always possible as each one will have 
 
 This concept applies for both executables and libraries, allowing us to create process specific and system wide patches, by either patching executables or libraries. The process is the same in both cases, we load an arbitrary target binary and patch its physical memory, the patches will reflect and persist until the system is restarted.
 
-# Address space limitations
+![with-cow](/assets/limitations.png)
 
 Someone might be tempted to load a kernel driver and patch it thinking that the patches would reflect in kernel space however, as we previously discussed, this is not possible.
 
