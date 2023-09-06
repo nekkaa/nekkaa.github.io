@@ -6,7 +6,7 @@ layout: post
 ![restaurant-guru](/assets/restaurant-guru.png){:style="display:block; margin-left:auto; margin-right:auto"}
 
 # Creating a comment
-Restaurant Guru allows anyone to write a comment on the page of their favorite restaurant, either if the user is logged in or not, so thats what I did, I hooked up burpsuite and wrote a comment.
+Restaurant Guru allows anyone to write a comment on the page of their favorite restaurant, either if the user is logged in or not, so thats what I did, I hooked up burp suite and wrote a comment.
 
 ![comment-add](/assets/comment-add.png)
 
