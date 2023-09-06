@@ -20,7 +20,7 @@ After posting my comment I realized that just writing `great!` for a such good r
 As we can see the same `/ajax/comment_add` endpoint is being used and the comment_id field, or `cid` for short, is responsibile for identifying the comment we want to edit, this field was set to `0` when we were creating the comment.
 
 # Arbitrary comment overwrite
-Once my comment was edited I was ready to see what the other people had to say about this restaurant, the comments were pretty good as expected but there were a few comments that looked a little fake and hateful.
+Once my comment was edited I was ready to see what the other people had to say about this restaurant, the comments were pretty good as expected but there were a few that looked a little fake and hateful.
 
 I was a little disappointed in seeing that so I tried to figure out a way to edit these comments, the first thing I tried was setting the `cid` field of the form to comment id of the hateful comment. Finding the comment_id was pretty simple as we can just scrape it from the page.
 
