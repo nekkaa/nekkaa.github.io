@@ -30,7 +30,7 @@ After playing a little with the text I noticed that the only character you are a
 
 The next thing I tried was adding a lot of spaces and seeing how the endpoint would reply, after the text reaches the size of 5500 characters the endpoint replies with code 500 and greets us with the following data.
 
-```http
+```
 HTTP/2 500 Internal Server Error
 Cache-Control: public, max-age=0, must-revalidate
 Content-Type: application/json; charset=utf-8
