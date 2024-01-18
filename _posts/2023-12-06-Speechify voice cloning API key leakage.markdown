@@ -96,4 +96,4 @@ After running the script we get our `output.mp3` file containing the result!
 ![output-file](/assets/voice-clone-files.png)
 
 # Conclusion
-After finding out about this, I sent them an email however I never received a reply. However, as of now, it appears that the leakage has been resolved, and the API key has been invalidated.
+I sent them an email to get this sorted out but never received a reply. As of now, it appears that the leakage has been resolved, and the API key has been invalidated.
