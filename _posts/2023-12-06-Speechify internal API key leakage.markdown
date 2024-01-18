@@ -10,9 +10,8 @@ Yesterday, I came across a video on Youtube of a guy using an AI Voice cloning s
 
 It was pretty funny to watch because he was doing this on roleplay servers and, as you may already know, there are rules to follow and people tend to get into arguments frequently. 
 
-<center><div class="embed-responsive embed-responsive-16by9">
-  <iframe class="embed-responsive-item" src="https://www.youtube.com/embed/yvLb6gkPYgw" allowfullscreen></iframe>
-</div></center>
+- [EDITING clips with Ai to get an ADMIN FIRED! @parkerrYT](https://www.youtube.com/embed/yvLb6gkPYgw)
+
 Put simply, he would record a sample of the voice to clone and use the ElevenLabs voice cloning service to make them say things they never meant to.
 
 # ElevenLabs AI Voice cloning
