@@ -12,7 +12,7 @@ It was pretty funny to watch because he was doing this on roleplay servers and, 
 
 - [EDITING clips with Ai to get an ADMIN FIRED! @parkerrYT](https://youtu.be/yvLb6gkPYgw?si=zLY_ITZl_RtUQZnT)
 
-Put simply, he would record a sample of the voice to clone and use the ElevenLabs voice cloning service to make them say things they never meant to.
+Put simply, he would record a sample of the voice to clone and use the ElevenLabs voice cloning service to make them say things they never meant to, of course revealing in the end how thing really went.
 
 # ElevenLabs AI Voice cloning
 Next thing you know, I am looking at the plans that ElevenLabs offers, I wanted to play with it a little and see how accurate it really is but didn't feel like spending the 22$ (at the time), and started looking for an alternative.
