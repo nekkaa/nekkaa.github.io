@@ -77,10 +77,8 @@ from elevenlabs import set_api_key
 api_key = 'a67a36e2011cf31e21343adb66f46ca2'
 set_api_key(api_key)
 
-voice = clone(
-  name="nekka",
-  files=["./sample.mp3"],
-)
+voice = clone(name="nekka",
+              files=["./sample.mp3"])
 
 audio = generate(text="hi! how you doing?",
                  voice=voice, 
